@@ -42,12 +42,17 @@ def get_weather():
 def get_currency():
     url = "https://bank.gov.ua/NBUStatService/v1/statistix/exchange?json"
     currency_report = "💵 **КУРС ВАЛЮТ (НБУ)** 💵\n"
+    # Додаємо заголовок, щоб НБУ не блокував запити від GitHub
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
     try:
-        res = requests.get(url).json()
+        res = requests.get(url, headers=headers).json()
         usd = next(item for item in res if item["cc"] == "USD")["rate"]
         eur = next(item for item in res if item["cc"] == "EUR")["rate"]
         currency_report += f"🇺🇸 Долар (USD): {usd:.2f} грн\n🇪🇺 Євро (EUR): {eur:.2f} грн\n\n"
-    except Exception:
+    except Exception as e:
+        print(f"Помилка валюти: {e}") # це запишеться в логи GitHub для діагностики
         currency_report += "Не вдалося завантажити курс валют\n\n"
     return currency_report
 
