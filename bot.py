@@ -40,19 +40,28 @@ def get_weather():
     return weather_report
 
 def get_currency():
-    url = "https://bank.gov.ua/NBUStatService/v1/statistix/exchange?json"
-    currency_report = "💵 **КУРС ВАЛЮТ (НБУ)** 💵\n"
-    # Додаємо заголовок, щоб НБУ не блокував запити від GitHub
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    }
+    url = "https://api.monobank.ua/bank/currency"
+    currency_report = "💵 **КУРС ВАЛЮТ** 💵\n"
     try:
-        res = requests.get(url, headers=headers).json()
-        usd = next(item for item in res if item["cc"] == "USD")["rate"]
-        eur = next(item for item in res if item["cc"] == "EUR")["rate"]
-        currency_report += f"🇺🇸 Долар (USD): {usd:.2f} грн\n🇪🇺 Євро (EUR): {eur:.2f} грн\n\n"
+        res = requests.get(url).json()
+        
+        # Коди валют ISO 4217: 840 - USD, 978 - EUR, 980 - UAH
+        # Шукаємо пари USD/UAH та EUR/UAH
+        usd_data = next(item for item in res if item["currencyCodeA"] == 840 and item["currencyCodeB"] == 980)
+        eur_data = next(item for item in res if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 980)
+        
+        # У Монобанку є курс купівлі (rateBuy) та продажу (rateSell)
+        # Якщо їх немає (всі дані в одному полі), беремо rateCross
+        usd_buy = usd_data.get("rateBuy", usd_data.get("rateCross"))
+        usd_sell = usd_data.get("rateSell", usd_data.get("rateCross"))
+        
+        eur_buy = eur_data.get("rateBuy", eur_data.get("rateCross"))
+        eur_sell = eur_data.get("rateSell", eur_data.get("rateCross"))
+        
+        currency_report += f"🇺🇸 Долар (USD):\n🔹 Купівля: {usd_buy:.2f} грн | 🔸 Продаж: {usd_sell:.2f} грн\n\n"
+        currency_report += f"🇪🇺 Євро (EUR):\n🔹 Купівля: {eur_buy:.2f} грн | 🔸 Продаж: {eur_sell:.2f} грн\n\n"
     except Exception as e:
-        print(f"Помилка валюти: {e}") # це запишеться в логи GitHub для діагностики
+        print(f"Помилка валюти: {e}")
         currency_report += "Не вдалося завантажити курс валют\n\n"
     return currency_report
 
