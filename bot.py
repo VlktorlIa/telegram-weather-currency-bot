@@ -37,7 +37,6 @@ def get_weather():
     tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     
     for city, coord in CITIES.items():
-        # Додаємо параметр weather_code у запит до API
         url = f"https://api.open-meteo.com/v1/forecast?latitude={coord['lat']}&longitude={coord['lon']}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code&timezone=auto"
         try:
             res = requests.get(url).json()
@@ -50,19 +49,19 @@ def get_weather():
             t_max = res["daily"]["temperature_2m_max"][idx]
             t_min = res["daily"]["temperature_2m_min"][idx]
             rain = res["daily"]["precipitation_sum"][idx]
-            w_code = res["daily"]["weather_code"][idx] # Отримуємо код погоди
+            w_code = res["daily"]["weather_code"][idx]
             
-            # Отримуємо гарний опис на основі коду
             weather_desc = get_weather_description(w_code)
             
-            weather_report += f"📍 **{city}**:\n📝 Статус: {weather_desc}\n🌡 Від {t_min}°C до {t_max}°C\n🌧 Опади: {rain} мм\n\n"
+            # Прибрали "📝 Статус:", тепер виводиться одразу емодзі та опис погоди
+            weather_report += f"📍 **{city}**:\n{weather_desc}\n🌡 Від {t_min}°C до {t_max}°C\n🌧 Опади: {rain} мм\n\n"
         except Exception:
             weather_report += f"📍 **{city}**: Не вдалося завантажити дані\n\n"
     return weather_report
 
 def get_currency():
     url = "https://api.monobank.ua/bank/currency"
-    currency_report = "💵 **КУРС ВАЛЮТ** 💵\n"
+    currency_report = "💵 **КУРС ВАЛЮТ** 💵\n\n"
     try:
         res = requests.get(url).json()
         usd_data = next(item for item in res if item["currencyCodeA"] == 840 and item["currencyCodeB"] == 980)
@@ -74,8 +73,9 @@ def get_currency():
         eur_buy = eur_data.get("rateBuy", eur_data.get("rateCross"))
         eur_sell = eur_data.get("rateSell", eur_data.get("rateCross"))
         
-        currency_report += f"🇺🇸 Долар (USD):\n🔹 Купівля: {usd_buy:.2f} грн | 🔸 Продаж: {usd_sell:.2f} грн\n\n"
-        currency_report += f"🇪🇺 Євро (EUR):\n🔹 Купівля: {eur_buy:.2f} грн | 🔸 Продаж: {eur_sell:.2f} грн\n\n"
+        # Перенесли продаж на новий рядок прямо під купівлю
+        currency_report += f"🇺🇸 **Долар (USD):**\n🔹 Купівля: {usd_buy:.2f} грн\n🔸 Продаж: {usd_sell:.2f} грн\n\n"
+        currency_report += f"🇪🇺 **Євро (EUR):**\n🔹 Купівля: {eur_buy:.2f} грн\n🔸 Продаж: {eur_sell:.2f} грн\n\n"
     except Exception as e:
         print(f"Помилка валюти: {e}")
         currency_report += "Не вдалося завантажити курс валют\n\n"
