@@ -1,12 +1,14 @@
 import os
 import requests
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
+from google import genai
 
 # Налаштування змінних
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 
-# Координати міст для погоди (Open-Meteo)
 CITIES = {
     "Київ": {"lat": 50.45, "lon": 30.52},
     "Гданськ": {"lat": 54.35, "lon": 18.64},
@@ -14,20 +16,13 @@ CITIES = {
     "Тенеріфе": {"lat": 28.29, "lon": -16.63}
 }
 
-# Функція для перетворення цифрового коду Open-Meteo у текстовий опис з емодзі
 def get_weather_description(code):
     mapping = {
-        0: "☀️ Ясно / Сонячно",
-        1: "🌤 Переважно ясно",
-        2: "⛅️ Мінлива хмарність",
-        3: "☁️ Похмуро",
-        45: "🌫 Туман", 48: "🌫 Туман із памороззю",
-        51: "🌧 Мряка легка", 53: "🌧 Мряка помірна", 55: "🌧 Мряка густа",
-        61: "🌧 Невеликий дощ", 63: "🌧 Помірний дощ", 65: "🌧 Сильний дощ",
+        0: "☀️ Ясно / Сонячно", 1: "🌤 Переважно ясно", 2: "⛅️ Мінлива хмарність", 3: "☁️ Похмуро",
+        45: "🌫 Туман", 48: "🌫 Туман із памороззю", 51: "🌧 Мряка легка", 53: "🌧 Мряка помірна",
+        55: "🌧 Мряка густа", 61: "🌧 Невеликий дощ", 63: "🌧 Помірний дощ", 65: "🌧 Сильний дощ",
         71: "❄️ Невеликий сніг", 73: "❄️ Помірний сніг", 75: "❄️ Сильний сніг",
-        77: "❄️ Сніжна крупа",
         80: "🌧 Короткочасний дощ", 81: "🌧 Злива", 82: "🌧 Сильна злива",
-        85: "❄️ Короткочасний сніг", 86: "❄️ Сильний снігопад",
         95: "⛈ Гроза", 96: "⛈ Гроза з легким градом", 99: "⛈ Гроза з сильним градом"
     }
     return mapping.get(code, "🤷 Наче нормальна погода")
@@ -41,10 +36,7 @@ def get_weather():
         try:
             res = requests.get(url).json()
             dates = res["daily"]["time"]
-            if tomorrow in dates:
-                idx = dates.index(tomorrow)
-            else:
-                idx = 1
+            idx = dates.index(tomorrow) if tomorrow in dates else 1
                 
             t_max = res["daily"]["temperature_2m_max"][idx]
             t_min = res["daily"]["temperature_2m_min"][idx]
@@ -52,8 +44,6 @@ def get_weather():
             w_code = res["daily"]["weather_code"][idx]
             
             weather_desc = get_weather_description(w_code)
-            
-            # Прибрали "📝 Статус:", тепер виводиться одразу емодзі та опис погоди
             weather_report += f"📍 **{city}**:\n{weather_desc}\n🌡 Від {t_min}°C до {t_max}°C\n🌧 Опади: {rain} мм\n\n"
         except Exception:
             weather_report += f"📍 **{city}**: Не вдалося завантажити дані\n\n"
@@ -69,11 +59,9 @@ def get_currency():
         
         usd_buy = usd_data.get("rateBuy", usd_data.get("rateCross"))
         usd_sell = usd_data.get("rateSell", usd_data.get("rateCross"))
-        
         eur_buy = eur_data.get("rateBuy", eur_data.get("rateCross"))
         eur_sell = eur_data.get("rateSell", eur_data.get("rateCross"))
         
-        # Перенесли продаж на новий рядок прямо під купівлю
         currency_report += f"🇺🇸 **Долар (USD):**\n🔹 Купівля: {usd_buy:.2f} грн\n🔸 Продаж: {usd_sell:.2f} грн\n\n"
         currency_report += f"🇪🇺 **Євро (EUR):**\n🔹 Купівля: {eur_buy:.2f} грн\n🔸 Продаж: {eur_sell:.2f} грн\n\n"
     except Exception as e:
@@ -81,20 +69,61 @@ def get_currency():
         currency_report += "Не вдалося завантажити курс валют\n\n"
     return currency_report
 
+def get_ai_news():
+    if not GEMINI_KEY:
+        return ""
+        
+    news_report = "📰 **ГОЛОВНІ НОВИНИ (ШІ)** 📰\n\n"
+    try:
+        # Беремо міжнародну стрічку головних новин від УкрІнформ
+        rss_url = "https://www.ukrinform.ua/rss/block-lastnews"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(rss_url, headers=headers)
+        
+        root = ET.fromstring(response.content)
+        raw_news_list = []
+        
+        # Беремо перші 15 свіжих заголовків для аналізу
+        for item in root.findall(".//item")[:15]:
+            title = item.find("title").text
+            raw_news_list.append(f"- {title}")
+            
+        all_titles = "\n".join(raw_news_list)
+        
+        # Ініціалізуємо клієнта ШІ
+        client = genai.Client(api_key=GEMINI_KEY)
+        
+        prompt = (
+            "Перед тобою список свіжих новин. Обери з них 3 найважливіші головні події в Україні чи світі "
+            "(ігноруй дрібні регіональні чи суто побутові теми) та сформуй короткий аналітичний дайджест українською мовою. "
+            "Кожну з 3 подій опиши рівно одним лаконічним і зрозумілим реченням, яке передає суть події. "
+            "Починай кожну новину з нового рядка з відповідного тематичного емодзі. "
+            "Пиши чітко, структуровано, без будь-яких привітань, вступів чи підсумкових слів від себе."
+            f"\n\nСписок новин:\n{all_titles}"
+        )
+        
+        ai_response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+        )
+        
+        news_report += ai_response.text + "\n"
+    except Exception as e:
+        print(f"Помилка ШІ: {e}")
+        news_report += "Не вдалося сформувати дайджест новин через ШІ.\n\n"
+    return news_report
+
 def send_to_telegram(text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": text,
-        "parse_mode": "Markdown"
-    }
+    payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "Markdown"}
     requests.post(url, json=payload)
 
 if __name__ == "__main__":
     if not BOT_TOKEN or not CHAT_ID:
-        print("Помилка: Не вказано токени бота або ID чату!")
+        print("Помилка токенів!")
         exit(1)
         
-    message = get_currency() + get_weather()
+    # Склеюємо все разом
+    message = get_currency() + get_weather() + get_ai_news()
     send_to_telegram(message)
     print("Повідомлення успішно надіслано!")
