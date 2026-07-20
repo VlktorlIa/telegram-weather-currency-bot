@@ -2,7 +2,6 @@ import os
 import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
-from google import genai
 
 # Налаштування змінних
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -75,20 +74,21 @@ def get_ai_news():
         
     news_report = "📰 **ГОЛОВНІ НОВИНИ (ШІ)** 📰\n\n"
     try:
+        # Читаємо стрічку новин
         rss_url = "https://www.ukrinform.ua/rss/block-lastnews"
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(rss_url, headers=headers)
         
         root = ET.fromstring(response.content)
         raw_news_list = []
-        
         for item in root.findall(".//item")[:15]:
             title = item.find("title").text
             raw_news_list.append(f"- {title}")
             
         all_titles = "\n".join(raw_news_list)
         
-        client = genai.Client(api_key=GEMINI_KEY)
+        # ПРЯМИЙ СПОСІБ: робимо звичайний HTTP-запит до API Google без використання їхньої примхливої бібліотеки
+        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
         
         prompt = (
             "Перед тобою список свіжих новин. Обери з них 3 найважливіші головні події в Україні чи світі "
@@ -99,12 +99,19 @@ def get_ai_news():
             f"\n\nСписок новин:\n{all_titles}"
         )
         
-        ai_response = client.models.generate_content(
-            model='gemini-1.5-pro',
-            contents=prompt,
-        )
+        payload = {
+            "contents": [{
+                "parts": [{"text": prompt}]
+            }]
+        }
         
-        news_report += ai_response.text + "\n"
+        # Відправляємо запит
+        ai_res = requests.post(gemini_url, json=payload).json()
+        
+        # Дістаємо згенерований текст відповіді
+        ai_text = ai_res['candidates'][0]['content']['parts'][0]['text']
+        news_report += ai_text + "\n"
+        
     except Exception as e:
         print(f"Помилка ШІ: {e}")
         news_report += "Не вдалося сформувати дайджест новин через ШІ.\n\n"
