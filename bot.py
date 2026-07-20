@@ -75,7 +75,6 @@ def get_ai_news():
         
     news_report = "📰 **ГОЛОВНІ НОВИНИ (ШІ)** 📰\n\n"
     try:
-        # Беремо міжнародну стрічку головних новин від УкрІнформ
         rss_url = "https://www.ukrinform.ua/rss/block-lastnews"
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(rss_url, headers=headers)
@@ -83,14 +82,12 @@ def get_ai_news():
         root = ET.fromstring(response.content)
         raw_news_list = []
         
-        # Беремо перші 15 свіжих заголовків для аналізу
         for item in root.findall(".//item")[:15]:
             title = item.find("title").text
             raw_news_list.append(f"- {title}")
             
         all_titles = "\n".join(raw_news_list)
         
-        # Ініціалізуємо клієнта ШІ
         client = genai.Client(api_key=GEMINI_KEY)
         
         prompt = (
@@ -102,9 +99,9 @@ def get_ai_news():
             f"\n\nСписок новин:\n{all_titles}"
         )
         
-     ai_response = client.models.generate_content(
-     model='gemini-2.5-flash',
-     contents=prompt,
+        ai_response = client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=prompt,
         )
         
         news_report += ai_response.text + "\n"
@@ -123,7 +120,6 @@ if __name__ == "__main__":
         print("Помилка токенів!")
         exit(1)
         
-    # Склеюємо все разом
     message = get_currency() + get_weather() + get_ai_news()
     send_to_telegram(message)
     print("Повідомлення успішно надіслано!")
